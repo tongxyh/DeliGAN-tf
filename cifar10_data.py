@@ -1,4 +1,5 @@
-import cPickle
+#import cPickle
+import pickle
 import os
 import sys
 import tarfile
@@ -7,6 +8,7 @@ import numpy as np
 
 def maybe_download_and_extract(data_dir, url='http://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz'):
     if not os.path.exists(os.path.join(data_dir, 'cifar-10-batches-py')):
+        print(os.path.join(data_dir, 'cifar-10-batches-py'))
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
         filename = url.split('/')[-1]
@@ -22,11 +24,13 @@ def maybe_download_and_extract(data_dir, url='http://www.cs.toronto.edu/~kriz/ci
             print('Successfully downloaded', filename, statinfo.st_size, 'bytes.')
             tarfile.open(filepath, 'r:gz').extractall(data_dir)
 
+#using python3 interface]';'
 def unpickle(file):
     fo = open(file, 'rb')
-    d = cPickle.load(fo)
+    d = pickle.load(fo,encoding='bytes')
     fo.close()
-    return {'x': np.cast[np.float32]((-127.5 + d['data'].reshape((10000,3,32,32)))/128.), 'y': np.array(d['labels']).astype(np.uint8)}
+    #print(d.keys())
+    return {'x': np.cast[np.float32]((-127.5 + d[b'data'].reshape((10000,3,32,32)))/128.), 'y': np.array(d[b'labels']).astype(np.uint8)}
 
 def load(data_dir, subset='train'):
     maybe_download_and_extract(data_dir)

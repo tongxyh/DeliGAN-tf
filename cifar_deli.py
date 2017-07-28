@@ -6,6 +6,7 @@ import tensorflow as tf
 import numpy as np
 from ops import *
 from utils import *
+from cifar10_data import *
 import os
 import time
 from random import randint
@@ -18,25 +19,25 @@ import numpy as Math
 import sys
 from tensorflow.contrib.layers import batch_norm
 
-data_dir='home/hzchentong1/Datasets/cifar-10-batches-py/'
-results_dir='../results/cifar-10/'
+data_dir='../remote_data'
+results_dir='../remote_ouput'
 phase_train = tf.placeholder(tf.bool, name = 'phase_train')
 def Minibatch_Discriminator(input, num_kernels=100, dim_per_kernel=5, init=False, name='MD'):
     num_inputs=df_dim*4
     theta = tf.get_variable(name+"/theta",[num_inputs, num_kernels, dim_per_kernel], initializer=tf.random_normal_initializer(stddev=0.05))
     log_weight_scale = tf.get_variable(name+"/lws",[num_kernels, dim_per_kernel], initializer=tf.constant_initializer(0.0))
-    W = tf.mul(theta, tf.expand_dims(tf.exp(log_weight_scale)/tf.sqrt(tf.reduce_sum(tf.square(theta),0)),0))
+    W = tf.multiply(theta, tf.expand_dims(tf.exp(log_weight_scale)/tf.sqrt(tf.reduce_sum(tf.square(theta),0)),0))
     W = tf.reshape(W,[-1,num_kernels*dim_per_kernel])
     x = input
     x=tf.reshape(x, [batchsize,num_inputs])
     activation = tf.matmul(x, W)
     activation = tf.reshape(activation,[-1,num_kernels,dim_per_kernel])
-    abs_dif = tf.mul(tf.reduce_sum(tf.abs(tf.sub(tf.expand_dims(activation,3),tf.expand_dims(tf.transpose(activation,[1,2,0]),0))),2), 
+    abs_dif = tf.multiply(tf.reduce_sum(tf.abs(tf.subtract(tf.expand_dims(activation,3),tf.expand_dims(tf.transpose(activation,[1,2,0]),0))),2), 
                                                 1-tf.expand_dims(tf.constant(np.eye(batchsize),dtype=np.float32),1))
     f = tf.reduce_sum(tf.exp(-abs_dif),2)/tf.reduce_sum(tf.exp(-abs_dif))  
-    print(f.get_shape())
-    print(input.get_shape())
-    return tf.concat(1,[x, f])
+    #print(f.get_shape())
+    #print(x.get_shape())
+    return tf.concat([x, f],1)
 
 def linear(x,output_dim, name="linear"):
 
@@ -85,11 +86,12 @@ def convt(x, outputShape, Wx=3, Wy=3, stridex=1, stridey=1, padding='SAME', tran
 def discriminator(image, Reuse=False):
     with tf.variable_scope('disc', reuse=Reuse):
         #image = tf.reshape(image, [-1, IMG_W, imG_H, 3])
-        h0 = lrelu(conv(image, 5, 5, 1, df_dim, stridex=2, stridey=2, name='d_h0_conv'))
+        h0 = lrelu(conv(image, 5, 5, 3, df_dim, stridex=2, stridey=2, name='d_h0_conv'))
         h1 = lrelu( batch_norm(conv(h0, 5, 5, df_dim,df_dim*2,stridex=2,stridey=2,name='d_h1_conv'), decay=0.9, scale=True, updates_collections=None, is_training=phase_train, reuse=Reuse, scope='d_bn1'))
         h2 = lrelu(batch_norm(conv(h1, 3, 3, df_dim*2, df_dim*4, stridex=2, stridey=2,name='d_h2_conv'), decay=0.9,scale=True, updates_collections=None, is_training=phase_train, reuse=Reuse, scope='d_bn2'))
         h3 = tf.nn.max_pool(h2, ksize=[1,4,4,1], strides=[1,1,1,1],padding='VALID')
         h6 = tf.reshape(h2,[-1, 4*4*df_dim*4])
+        #print(h0,h1,h2,h3,h6)
         h7 = Minibatch_Discriminator(h3, num_kernels=df_dim*4, name = 'd_MD')
         h8 = dense(tf.reshape(h7, [batchsize, -1]), df_dim*4*2, 1, scope='d_h8_lin')
         return tf.nn.sigmoid(h8), h8 
@@ -97,39 +99,43 @@ def discriminator(image, Reuse=False):
 def generator(z):
     with tf.variable_scope('gen'):
         h0 = tf.reshape(tf.nn.relu(fc_batch_norm(linear(z, gf_dim*4*4*4, name='g_h0'), gf_dim*4*4*4, phase_train, 'g_bn0')), [-1, 4, 4, gf_dim*4])
-        h1 = tf.nn.relu(global_batch_norm(convt(h0,[batchsize, 7, 7, gf_dim*2],3, 3, 2, 2, name='g_h1'), gf_dim*2, phase_train, 'g_bn1'))
-        h3 = tf.nn.relu(global_batch_norm(convt(h1,[batchsize, 14, 14,gf_dim],5, 5, 2, 2, name='g_h3'), gf_dim, phase_train, 'g_bn3'))
+        h1 = tf.nn.relu(global_batch_norm(convt(h0,[batchsize, 8, 8, gf_dim*2],3, 3, 2, 2, name='g_h1'), gf_dim*2, phase_train, 'g_bn1'))
+        h3 = tf.nn.relu(global_batch_norm(convt(h1,[batchsize, 16, 16,gf_dim],5, 5, 2, 2, name='g_h3'), gf_dim, phase_train, 'g_bn3'))
         h4 = tf.tanh(convt(h3,[batchsize, IMG_W, IMG_H, 3], 5, 5, 2, 2, name='g_h4'))
         return h4
 
-gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.2)
+IMG_W = 32
+IMG_H = 32
+IMG_C = 3
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.9)
 with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     batchsize = 50
-    imageshape = [IMG_W*IMG_H]
+    imageshape = [IMG_W*IMG_H*IMG_C]
     z_dim = 30
     gf_dim = 16
     df_dim = 16
     learningrate = 0.0005
     beta1 = 0.5
 
-    images = tf.placeholder(tf.float32, [batchsize] + imageshape, name="real_images")
+    # [batchsize] + imageshape equals to [batchsize,imageshape]
+    images = tf.placeholder(tf.float32, [batchsize,IMG_W,IMG_H,IMG_C], name="real_images")
     z = tf.placeholder(tf.float32, [None, z_dim], name="z")
     lr1 = tf.placeholder(tf.float32, name="lr")
     # Our Mixture Model modifications
     zin = tf.get_variable("g_z", [batchsize, z_dim],initializer=tf.random_uniform_initializer(-1,1))
     zsig = tf.get_variable("g_sig", [batchsize, z_dim],initializer=tf.constant_initializer(0.2))
-    inp = tf.add(zin,tf.mul(z,zsig))
+    inp = tf.add(zin,tf.multiply(z,zsig))
     # inp = z     				# Uncomment this line when training/testing baseline GAN
     G = generator(inp)
     D_prob, D_logit = discriminator(images)
 
     D_fake_prob, D_fake_logit = discriminator(G, Reuse=True)
 
-    d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(D_logit, tf.ones_like(D_logit)))
-    d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(D_fake_logit, tf.zeros_like(D_fake_logit)))
+    d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels = tf.ones_like(D_logit),logits = D_logit))
+    d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels = tf.zeros_like(D_fake_logit),logits = D_fake_logit))
 
     sigma_loss = tf.reduce_mean(tf.square(zsig-1))/3    # sigma regularizer
-    gloss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(D_fake_logit, tf.ones_like(D_fake_logit)))
+    gloss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels = tf.ones_like(D_fake_logit),logits = D_fake_logit))
     dloss = d_loss_real + d_loss_fake 
 
     t_vars = tf.trainable_variables()
@@ -137,10 +143,10 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     g_vars = [var for var in t_vars if 'g_' in var.name]
 
     ## load data
-    trainx,trainy = load(data_dir, subset='train'):
+    trainx,trainy = load(data_dir, subset='train')
     #trainx = trainx*2-1
     print(trainy.shape)
-
+    data = []
     # Uniformly sampling 50 images per category from the dataset
     for i in range(10):
         print(np.sum(trainy==i))
@@ -153,7 +159,7 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
 
     d_optim = tf.train.AdamOptimizer(lr1, beta1=beta1).minimize(dloss, var_list=d_vars)
     g_optim = tf.train.AdamOptimizer(lr1, beta1=beta1).minimize(gloss + sigma_loss, var_list=g_vars)
-    tf.initialize_all_variables().run()
+    tf.global_variables_initializer().run()
 
     saver = tf.train.Saver(max_to_keep=10)
 
@@ -173,11 +179,11 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     if train:
         # saver.restore(sess, tf.train.latest_checkpoint(os.getcwd()+"../results/mnist/train/"))
         # training a model
-        for epoch in xrange(4000):
-            batch_idx = data_size/batchsize
+        for epoch in range(300):
+            batch_idx = int(data_size/batchsize)
             batch = data[rng.permutation(data_size)]
             lr = learningrate * (np.minimum((4 - epoch/1000.), 3.)/3)
-            for idx in xrange(batch_idx):
+            for idx in range(batch_idx):
                 batch_images = batch[idx*batchsize:(idx+1)*batchsize]
                 batch_z = np.random.uniform(-1.0, 1.0, [batchsize, z_dim]).astype(np.float32)
                 if count1>3:
@@ -189,7 +195,7 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                     count2=0
                     print('disc', thres)
 
-                for k in xrange(5):
+                for k in range(5):
                     batch_z = np.random.normal(0, 1.0, [batchsize, z_dim]).astype(np.float32)
                     if gloss.eval({z: batch_z, phase_train.name:False})>thres:
                         sess.run([g_optim],feed_dict={z: batch_z, lr1:lr, phase_train.name:True})

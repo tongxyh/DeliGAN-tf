@@ -2,7 +2,7 @@ import scipy.misc
 import numpy as np
 import random
 import tensorflow as tf
-import cPickle
+#import cPickle
 import pickle
 
 def get_image(image_path, image_size, is_crop=True):
