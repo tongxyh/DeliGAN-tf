@@ -144,17 +144,10 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
 
     ## load data
     trainx,trainy = load(data_dir, subset='train')
+    data = np.random.permutation(trainx)[:1000]
+    data = data.transpose(0,2,3,1)
     #trainx = trainx*2-1
-    print(trainy.shape)
-    data = []
-    # Uniformly sampling 50 images per category from the dataset
-    for i in range(10):
-        print(np.sum(trainy==i))
-        train = trainx[trainy==i]
-        print(train.shape)
-        data.append(train[-50:])
-    data = np.array(data)
-    print(data.shape)
+
     #data = np.reshape(data,[-1,IMG_W*IMG_H])
 
     d_optim = tf.train.AdamOptimizer(lr1, beta1=beta1).minimize(dloss, var_list=d_vars)
@@ -179,7 +172,7 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     if train:
         # saver.restore(sess, tf.train.latest_checkpoint(os.getcwd()+"../results/mnist/train/"))
         # training a model
-        for epoch in range(300):
+        for epoch in range(601):
             batch_idx = int(data_size/batchsize)
             batch = data[rng.permutation(data_size)]
             lr = learningrate * (np.minimum((4 - epoch/1000.), 3.)/3)
@@ -210,8 +203,9 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                     # Saving 49 randomly generated samples
                     print("Epoch: [%2d] [%4d/%4d] time: %4.4f, "  % (epoch, idx, batch_idx, time.time() - start_time,))
                     sdata = sess.run(G,feed_dict={ z: batch_z, phase_train.name:False})
-                    sdata = sdata.reshape(sdata.shape[0], IMG_W, IMG_H, 1)/2.+0.5
+                    sdata = sdata.reshape(sdata.shape[0], IMG_W, IMG_H, 3)/2.+0.5
                     sdata = merge(sdata[:49],[7,7])
+                    
                     sdata = np.array(sdata*255.,dtype=np.int)
                     cv2.imwrite(results_dir + "/" + str(counter) + ".png", sdata)
                     errD_fake = d_loss_fake.eval({z: display_z, phase_train.name:False})
@@ -225,11 +219,11 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                 if counter % 2000 == 0:
                     # Calculating the Nearest Neighbours corresponding to the generated samples
                     sdata = sess.run(G,feed_dict={ z: display_z, phase_train.name:False})
-                    sdata = sdata.reshape(sdata.shape[0], IMG_W*IMG_H)
+                    sdata = sdata.reshape(sdata.shape[0], IMG_W*IMG_H*3)
                     NNdiff = np.sum(np.square(np.expand_dims(sdata,axis=1) - np.expand_dims(data,axis=0)),axis=2)
                     NN = data[np.argmin(NNdiff,axis=1)]
-                    sdata = sdata.reshape(sdata.shape[0], IMG_W, IMG_H, 1)/2.+0.5
-                    NN = np.reshape(NN, [batchsize, IMG_W, IMG_H, 1])/2.+0.5
+                    sdata = sdata.reshape(sdata.shape[0], IMG_W, IMG_H, 3)/2.+0.5
+                    NN = np.reshape(NN, [batchsize, IMG_W, IMG_H, 3])/2.+0.5
                     sdata = merge(sdata[:49],[7,7])
                     NN = merge(NN[:49],[7,7])
                     sdata = np.concatenate([sdata, NN], axis=1)

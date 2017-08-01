@@ -32,12 +32,12 @@ def imread(path):
 def merge(images, size):
     h, w, c = images.shape[1], images.shape[2], images.shape[3]
     img = np.zeros((h * size[0], w * size[1], c))
-    #print img.shape
+    print(img.shape)
     for idx, image in enumerate(images):
         i = idx % size[1]
-        j = idx / size[1]
+        j = int(idx / size[1]) # python3 int will be converted to float during division
         #print j*h
-        img[j*h:j*h+h, i*w:i*w+w] = image
+        img[j*h:j*h+h, i*w:i*w+w,:] = image
 
     return img
 
