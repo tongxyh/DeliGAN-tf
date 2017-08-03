@@ -20,7 +20,7 @@ import sys
 from tensorflow.contrib.layers import batch_norm
 
 data_dir='../remote_data'
-results_dir='../remote_ouput'
+results_dir='../remote_output'
 phase_train = tf.placeholder(tf.bool, name = 'phase_train')
 def Minibatch_Discriminator(input, num_kernels=100, dim_per_kernel=5, init=False, name='MD'):
     num_inputs=df_dim*4
@@ -205,7 +205,7 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                     sdata = sess.run(G,feed_dict={ z: batch_z, phase_train.name:False})
                     sdata = sdata.reshape(sdata.shape[0], IMG_W, IMG_H, 3)/2.+0.5
                     sdata = merge(sdata[:49],[7,7])
-                    
+
                     sdata = np.array(sdata*255.,dtype=np.int)
                     cv2.imwrite(results_dir + "/" + str(counter) + ".png", sdata)
                     errD_fake = d_loss_fake.eval({z: display_z, phase_train.name:False})
@@ -220,8 +220,10 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                     # Calculating the Nearest Neighbours corresponding to the generated samples
                     sdata = sess.run(G,feed_dict={ z: display_z, phase_train.name:False})
                     sdata = sdata.reshape(sdata.shape[0], IMG_W*IMG_H*3)
-                    NNdiff = np.sum(np.square(np.expand_dims(sdata,axis=1) - np.expand_dims(data,axis=0)),axis=2)
+                    NNdiff = np.sum(np.square(np.expand_dims(sdata,axis=1) - np.expand_dims(data.reshape(data.shape[0], IMG_W*IMG_H*3),axis=0)),axis=2)
+                    print(data.shape)
                     NN = data[np.argmin(NNdiff,axis=1)]
+                    print(NNdiff.shape,NN.shape)
                     sdata = sdata.reshape(sdata.shape[0], IMG_W, IMG_H, 3)/2.+0.5
                     NN = np.reshape(NN, [batchsize, IMG_W, IMG_H, 3])/2.+0.5
                     sdata = merge(sdata[:49],[7,7])
@@ -231,6 +233,7 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                     cv2.imwrite(results_dir + "/NN" + str(counter) + ".png", sdata)#gan_1nin_8gfdim_floss_alpha1_z15
 
                     # Plotting the latent space using tsne
+                    '''
                     z_Mog = zin.eval()#display_z
                     gen = G.eval({z:display_z,  phase_train.name:False})
                     Y = tsne.tsne(z_Mog, 2, z_dim, 10.0);
@@ -248,7 +251,10 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                     ax.autoscale()
                     Plot.scatter(Y[:,0], Y[:,1], 20);
                     fig.savefig(results_dir + "/plot" + str(counter) + ".png")
-                    saver.save(sess,os.getcwd()+"../results/mnist/train/", global_step=counter)
+                    '''
+                    print(os.getcwd())
+                    #os.getcwd()+"../results/mnist/train/"
+                    saver.save(sess, results_dir+'/train', global_step=counter)
     else:
         #Generating samples from a saved model
         saver.restore(sess,tf.train.latest_checkpoint(os.getcwd()+"../results/mnist/train/"))
